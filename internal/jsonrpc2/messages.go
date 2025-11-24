@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 )
 
@@ -260,6 +261,47 @@ func DecodeMessageFrom(data []byte) (Message, error) {
 	r.Reset(data)
 	defer func() { r.Reset(nil); readerPool.Put(r) }()
 
+	// Use a pooled wireCombined to reduce allocations for the wrapper struct.
+	wire := wirePool.Get().(*wireCombined)
+	defer func() {
+		*wire = wireCombined{}
+		wirePool.Put(wire)
+	}()
+
+	dec := json.NewDecoder(r)
+	if err := dec.Decode(wire); err != nil {
+		return nil, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
+	}
+	if wire.VersionTag != wireVersion {
+		return nil, fmt.Errorf("invalid message version tag %q; expected %q", wire.VersionTag, wireVersion)
+	}
+	id, err := MakeID(wire.ID)
+	if err != nil {
+		return nil, err
+	}
+	if wire.Method != "" {
+		return &Request{
+			Method: wire.Method,
+			ID:     id,
+			Params: wire.Params,
+		}, nil
+	}
+	if !id.IsValid() {
+		return nil, ErrInvalidRequest
+	}
+	resp := &Response{
+		ID:     id,
+		Result: wire.Result,
+	}
+	if wire.Error != nil {
+		resp.Error = wire.Error
+	}
+	return resp, nil
+}
+
+// DecodeMessageFromReader decodes a JSON-RPC message from the provided io.Reader.
+// It uses a pooled wireCombined to reduce allocations for the wrapper struct.
+func DecodeMessageFromReader(r io.Reader) (Message, error) {
 	// Use a pooled wireCombined to reduce allocations for the wrapper struct.
 	wire := wirePool.Get().(*wireCombined)
 	defer func() {

@@ -93,7 +93,7 @@ func (c *websocketConn) readLoop() {
 	defer c.conn.Close()
 
 	for {
-		messageType, data, err := c.conn.ReadMessage()
+		messageType, r, err := c.conn.NextReader()
 		if err != nil {
 			c.err = err
 			return
@@ -105,8 +105,8 @@ func (c *websocketConn) readLoop() {
 			return
 		}
 
-		// Decode message using pooled reader/decoder to reduce allocations.
-		msg, err := jsonrpc.DecodeMessageFrom(data)
+		// Decode message using streaming decoder to avoid full-frame allocation.
+		msg, err := jsonrpc.DecodeMessageFromReader(r)
 		if err != nil {
 			// TODO: Log error? For now, we treat decode errors as fatal to the connection
 			// or we could just skip bad messages.

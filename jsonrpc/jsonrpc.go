@@ -8,6 +8,7 @@ package jsonrpc
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/modelcontextprotocol/go-sdk/internal/jsonrpc2"
 )
@@ -53,4 +54,11 @@ func DecodeMessage(data []byte) (Message, error) {
 // allocations when decoding messages received by transports.
 func DecodeMessageFrom(data []byte) (Message, error) {
 	return jsonrpc2.DecodeMessageFrom(data)
+}
+
+// DecodeMessageFromReader decodes a JSON-RPC message from the supplied io.Reader.
+// It allows streaming decode directly from a connection, avoiding intermediate
+// buffer allocations.
+func DecodeMessageFromReader(r io.Reader) (Message, error) {
+	return jsonrpc2.DecodeMessageFromReader(r)
 }
