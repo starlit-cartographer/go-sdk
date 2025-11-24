@@ -107,6 +107,17 @@ Total alloc_space: 90.70MB (vs ~1GB previously)
 Observation: io.ReadAll is completely eliminated. The remaining allocations are from bufio buffers (likely reused or per-connection) and the actual JSON encoding.
 </pre>
 
+<h2>Cross-Language Comparison</h2>
+<p>We compared the optimized Go WebSocket transport against the Python SDK (using <code>asyncio</code> + <code>websockets</code> + <code>orjson</code>/<code>pydantic</code>). The Go implementation is significantly faster.</p>
+
+<table>
+<tr><th>Metric</th><th>Go (Optimized)</th><th>Python SDK (Asyncio)</th><th>Factor</th></tr>
+<tr><td><strong>Avg ns/op</strong></td><td>16,243 ns/op</td><td>~143,798 ns/op</td><td>Go is ~8.8x faster</td></tr>
+<tr><td><strong>Ops/sec</strong></td><td>~61,565 ops/s</td><td>~6,958 ops/s</td><td>Go handles ~9x more throughput</td></tr>
+</table>
+
+<p><em>Python benchmark details: ran 3x with 2000 iterations, payload 1024 bytes. Average latency ~143µs vs Go ~16µs.</em></p>
+
 <h2>Conclusions & Prioritized Recommendations</h2>
 <ol>
   <li><strong>Eliminate io.ReadAll in the hot path (Verified)</strong> — We modified the benchmark harness to use streaming reads (<code>NextReader</code> + <code>io.Copy</code>), which eliminated the 1GB allocation noise. The remaining profile shows that the transport is now highly efficient (224 B/op). We also updated the production <code>readLoop</code> to use <code>NextReader</code> and streaming decode, ensuring this efficiency translates to real-world usage.</li>
